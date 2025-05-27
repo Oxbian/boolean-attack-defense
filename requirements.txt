@@ -1,0 +1,4 @@
+matplotlib==3.10.3
+networkx==3.4.2
+PyQt6==6.9.0
+uuid==1.30
