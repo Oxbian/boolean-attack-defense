@@ -1,3 +1,4 @@
+from attacker import FaultyCircuit
 from circuit import LogicCircuit, LogicGate
 
 # Création d’un circuit : (A AND B) → OUT
@@ -21,3 +22,10 @@ circuit.connect("AND1", "OUT")
 # Évaluation
 print(circuit.evaluate({"A": True, "B": False}))  # {'OUT': False}
 circuit.visualize()
+
+# Création d'un circuit fautif
+faulty_circuit = FaultyCircuit(circuit)
+
+faulty_circuit.add_fault("AND1", "bitflip")
+print(faulty_circuit.evaluate({"A": True, "B": False}))  # {'OUT': True}
+faulty_circuit.visualize()

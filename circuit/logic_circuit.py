@@ -144,12 +144,22 @@ class LogicCircuit:
         """Affiche graphiquement le circuit"""
 
         labels = {}
+        node_colors = []
+
         for node in self.graph.nodes:
-            labels[node] = f"{self.graph.nodes[node]["gate"].gate_id} : {
-                self.graph.nodes[node]["gate"].gate_type}"
+            gate = self.graph.nodes[node]["gate"]
+            labels[node] = f"{gate.gate_id} : {gate.gate_type}"
+
+            # Colorations des noeuds selon leur type
+            if gate.gate_type == "INPUT":
+                node_colors.append("green")
+            elif gate.gate_type == "OUTPUT":
+                node_colors.append("yellow")
+            else:
+                node_colors.append("lightblue")
 
         nx.draw(self.graph, labels=labels, with_labels=True,
-                node_size=1500, node_color="lightblue")
+                node_size=1500, node_color=node_colors)
 
         plt.title("Visualisation du circuit logique")
         plt.show()
