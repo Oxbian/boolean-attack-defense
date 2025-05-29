@@ -11,8 +11,7 @@ def check_circuits(circuit_a_filepath: str, circuit_b_filepath: str, abc_path:
     non
     """
 
-    cmd = f"read {circuit_a_filepath}\nread {circuit_b_filepath}\ncec {
-        circuit_a_filepath} {circuit_b_filepath}\n"
+    cmd = f"read {circuit_a_filepath}\nread {circuit_b_filepath}\ncec {circuit_a_filepath} {circuit_b_filepath}\n"
 
     process = subprocess.Popen([abc_path], stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
