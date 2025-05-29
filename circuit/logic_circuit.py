@@ -163,3 +163,80 @@ class LogicCircuit:
 
         plt.title("Visualisation du circuit logique")
         plt.show()
+
+    def export_to_blif(self, filename: str, model_name="circuit"):
+        """
+        Exporte le circuit logique sous forme BLIF.
+        """
+
+        with open(filename, "w") as f:
+            f.write(f".model {model_name}\n")
+
+            # Définir les entrées et sorties
+            inputs = [
+                n for n in self.graph.nodes if self.graph.in_degree(n) == 0]
+            outputs = [
+                n for n in self.graph.nodes if self.graph.out_degree(n) == 0]
+
+            f.write(".inputs " + " ".join(inputs) + "\n")
+            f.write(".outputs " + " ".join(outputs) + "\n")
+
+            for node in nx.topological_sort(self.graph):
+                gate = self.graph.nodes[node]["gate"]
+                gate_type = gate.gate_type.upper()
+                predecessors = list(self.graph.predecessors(node))
+
+                # Cas spécial de l'output pour l'intégrité du BLIF
+                if gate_type == "OUTPUT":
+                    if len(predecessors) != 1:
+                        raise ValueError(
+                            f"La sortie {node} doit avoir exactement un prédécesseur.")
+                    f.write(f".names {predecessors[0]} {node}\n")
+                    f.write("1 1\n")
+                    continue
+
+                if gate_type == "AND":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    f.write("1" * len(predecessors) + " 1\n")
+
+                elif gate_type == "OR":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    for i in range(len(predecessors)):
+                        row = ['-'] * len(predecessors)
+                        row[i] = '1'
+                        f.write("".join(row) + " 1\n")
+
+                elif gate_type == "NOT":
+                    f.write(f".names {predecessors[0]} {node}\n")
+                    f.write("0 1\n")
+
+                elif gate_type == "NAND":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    f.write("1" * len(predecessors) + " 0\n")
+
+                elif gate_type == "NOR":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    for i in range(len(predecessors)):
+                        row = ['-'] * len(predecessors)
+                        row[i] = '1'
+                        f.write("".join(row) + " 0\n")
+
+                elif gate_type == "XOR":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    if len(predecessors) == 2:
+                        f.write("10 1\n01 1\n")
+                    else:
+                        raise ValueError(
+                            "XOR à plus de 2 entrées non supporté en BLIF natif")
+
+                elif gate_type == "BUF":
+                    f.write(f".names {predecessors[0]} {node}\n")
+                    f.write("1 1\n")
+
+                elif gate_type == "INPUT":
+                    continue
+                else:
+                    raise ValueError(
+                        f"Type de porte non reconnu : {gate_type}")
+
+            f.write(".end\n")
