@@ -36,13 +36,27 @@ class LogicCircuit:
 
         self.graph.add_edge(from_id, to_id)
 
-    def remove_gate(self, gate_id: str):
+    def remove_gate(self, gate_id: str) -> bool:
         """Supprimer une porte logique du graphe
         @param gate_id: Identifiant de la porte à supprimé
+
+        @return: Booléen indiquant la réussite de la suppression ou non
         """
 
-        # TODO: vérification droit de la supprimer
+        # Vérification de l'existence du noeud
+        if not self.graph.has_node(gate_id):
+            raise ValueError(
+                f"{bcolors.WARNING}Identifiant de la porte à supprimé non présent dans le graphe")
+
+        # Sauvegarde du graphe avant la suppression pour pouvoir backup
+        bk = self.graph.copy()
         self.graph.remove_node(gate_id)
+
+        if not self.is_valid():
+            self.graph = bk
+            return False
+
+        return True
 
     def disconnect(self, from_id: str, to_id: str):
         """Déconnecter deux portes logiques, ex: C a pour entrée A et B
@@ -51,6 +65,36 @@ class LogicCircuit:
         @param to_id: Identifiant de la porte de destination, ex: C
         """
         self.graph.remove_edge(from_id, to_id)
+
+    def is_valid(self) -> bool:
+        """Vérification que le circuit est correct
+        Input et output bien liées, chaque porte à assez d'entrées
+
+        @return: Booléen de la validité du graphe
+        """
+
+        for node in self.graph.nodes:
+            gate = self.graph.nodes[node]["gate"]
+            preds = list(self.graph.predecessors(node))
+
+            # Vérification que les noeuds ont bien assez d'entrées
+            if gate.gate_type in {"NOT", "OUTPUT"} and len(preds) != 1:
+                return False
+            if gate.gate_type in {"AND", "OR", "XOR", "NAND", "NOR", "XNOR"} and len(preds) < 2:
+                return False
+
+            # Vérifie que chaque OUTPUT est atteignable depuis au moins un INPUT
+            inputs = [n for n in self.graph.nodes if self.graph.nodes[n]
+                      ["gate"].gate_type == "INPUT"]
+            outputs = [n for n in self.graph.nodes if self.graph.nodes[n]
+                       ["gate"].gate_type == "OUTPUT"]
+
+            for output in outputs:
+                reachable = any(nx.has_path(self.graph, src, output)
+                                for src in inputs)
+                if not reachable:
+                    return False
+        return True
 
     def evaluate(self, input_values: dict[str, bool]) -> dict[str, bool]:
         """Calcul le résultat du circuit booléen
@@ -100,12 +144,99 @@ class LogicCircuit:
         """Affiche graphiquement le circuit"""
 
         labels = {}
+        node_colors = []
+
         for node in self.graph.nodes:
-            labels[node] = f"{self.graph.nodes[node]["gate"].gate_id} : {
-                self.graph.nodes[node]["gate"].gate_type}"
+            gate = self.graph.nodes[node]["gate"]
+            labels[node] = f"{gate.gate_id} : {gate.gate_type}"
+
+            # Colorations des noeuds selon leur type
+            if gate.gate_type == "INPUT":
+                node_colors.append("green")
+            elif gate.gate_type == "OUTPUT":
+                node_colors.append("yellow")
+            else:
+                node_colors.append("lightblue")
 
         nx.draw(self.graph, labels=labels, with_labels=True,
-                node_size=1500, node_color="lightblue")
+                node_size=1500, node_color=node_colors)
 
         plt.title("Visualisation du circuit logique")
         plt.show()
+
+    def export_to_blif(self, filename: str, model_name="circuit"):
+        """
+        Exporte le circuit logique sous forme BLIF.
+        """
+
+        with open(filename, "w") as f:
+            f.write(f".model {model_name}\n")
+
+            # Définir les entrées et sorties
+            inputs = [
+                n for n in self.graph.nodes if self.graph.in_degree(n) == 0]
+            outputs = [
+                n for n in self.graph.nodes if self.graph.out_degree(n) == 0]
+
+            f.write(".inputs " + " ".join(inputs) + "\n")
+            f.write(".outputs " + " ".join(outputs) + "\n")
+
+            for node in nx.topological_sort(self.graph):
+                gate = self.graph.nodes[node]["gate"]
+                gate_type = gate.gate_type.upper()
+                predecessors = list(self.graph.predecessors(node))
+
+                # Cas spécial de l'output pour l'intégrité du BLIF
+                if gate_type == "OUTPUT":
+                    if len(predecessors) != 1:
+                        raise ValueError(
+                            f"La sortie {node} doit avoir exactement un prédécesseur.")
+                    f.write(f".names {predecessors[0]} {node}\n")
+                    f.write("1 1\n")
+                    continue
+
+                if gate_type == "AND":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    f.write("1" * len(predecessors) + " 1\n")
+
+                elif gate_type == "OR":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    for i in range(len(predecessors)):
+                        row = ['-'] * len(predecessors)
+                        row[i] = '1'
+                        f.write("".join(row) + " 1\n")
+
+                elif gate_type == "NOT":
+                    f.write(f".names {predecessors[0]} {node}\n")
+                    f.write("0 1\n")
+
+                elif gate_type == "NAND":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    f.write("1" * len(predecessors) + " 0\n")
+
+                elif gate_type == "NOR":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    for i in range(len(predecessors)):
+                        row = ['-'] * len(predecessors)
+                        row[i] = '1'
+                        f.write("".join(row) + " 0\n")
+
+                elif gate_type == "XOR":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    if len(predecessors) == 2:
+                        f.write("10 1\n01 1\n")
+                    else:
+                        raise ValueError(
+                            "XOR à plus de 2 entrées non supporté en BLIF natif")
+
+                elif gate_type == "BUF":
+                    f.write(f".names {predecessors[0]} {node}\n")
+                    f.write("1 1\n")
+
+                elif gate_type == "INPUT":
+                    continue
+                else:
+                    raise ValueError(
+                        f"Type de porte non reconnu : {gate_type}")
+
+            f.write(".end\n")

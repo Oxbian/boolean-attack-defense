@@ -32,3 +32,7 @@ Pour l'utilisation du programme:
 ```bash
 .venv/bin/python3 main.py
 ```
+
+La vérification formelle de l'égalité de deux circuits se faisant avec l'utilitaire
+[abc](https://github.com/berkeley-abc/abc), son installation est nécessaire.
+*TODO: rajouter un fichier de config pour définir le path du programme ABC*
