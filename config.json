@@ -1,3 +1,4 @@
 {
-	"abc_path": "/usr/bin/abc"
+	"abc_path": "/usr/bin/abc",
+	"target_blif": "notfirst.blif"
 }
