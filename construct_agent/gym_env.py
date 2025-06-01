@@ -41,8 +41,14 @@ class LogicCircuitEnv(gym.Env):
         # le 3e et 4e c'est l'id encodée de la porte (0 à max gates)
 
         self.max_gates = 20
-        self.action_space = gym.spaces.Discrete(
-            4 * len(self.available_gates) * self.max_gates * self.max_gates)
+
+        # Définition d'un nombre d'actions possibles max car l'action space
+        # doit être constant mais le nombre d'action possible est dynamique,
+        # d'où l'utilisation du masque
+        self.max_actions = 4 * len(self.available_gates) * \
+            self.max_gates * self.max_gates
+
+        self.action_space = gym.spaces.Discrete(self.max_actions)
 
         # Définition d'une matrice max_gates * (nombre type + connexions) pour
         # enregistrer l'état du circuit
@@ -51,6 +57,7 @@ class LogicCircuitEnv(gym.Env):
                                   len(self.available_gates)), dtype=np.int8)
 
         self.circuit = None
+        self.valid_actions = []
 
     def reset(self, seed=None, options=None):
         """
@@ -69,7 +76,9 @@ class LogicCircuitEnv(gym.Env):
         # self.faulty_circuit = FaultyCircuit(self.circuit)
         # self.faulty_circuit.add_fault("OUT", "bitflip")
 
-        return self._get_obs(), {}
+        obs = self._get_obs()
+        info = {"action_mask": self.get_action_mask()}
+        return obs, info
 
     def step(self, action):
         """
@@ -82,45 +91,55 @@ class LogicCircuitEnv(gym.Env):
         truncated = False
         reward = -0.1
 
+        # Indexation de noeuds du graph
         self.id_to_index = {gate_id: i for i, gate_id in enumerate(
             sorted(self.circuit.graph.nodes))}
         self.index_to_id = {i: gate_id for gate_id,
                             i in self.id_to_index.items()}
 
         try:
-            action_type, action_gate_type, action_id1, action_id2 = action
+            actual_action = self.valid_actions[action]
+            action_type, action_gate_type, action_id1, action_id2 = actual_action
             source_id = self.index_to_id.get(action_id1, f"G{action_id1}")
             target_id = self.index_to_id.get(action_id2, f"G{action_id2}")
 
             if action_type == 0:  # Ajouter une porte logique au circuit
                 gate_type = self._int_to_gate_type(action_gate_type)
                 self.circuit.add_gate(LogicGate(gate_type))
+
             elif action_type == 1:  # Supprimer une porte logique
                 is_removed = self.circuit.remove_gate(source_id)
-
                 if is_removed is False:
                     reward = -1
+
             elif action_type == 2:  # Connecter deux portes logiques
                 self.circuit.connect(source_id, target_id)
+
             elif action_type == 3:  # Déconnecter deux portes logiques
                 self.circuit.disconnect(source_id, target_id)
 
             if self.circuit.is_valid():
+                # Sauvegarder le circuit + comparer avec les fonctionnalités
+                # avec le circuit de base
                 tmp_fd, tmp_path = tempfile.mkstemp(suffix=".blif")
                 os.close(tmp_fd)
                 self.circuit.export_to_blif(tmp_path, "tmp")
-                # Sauvegarder le circuit + comparer avec le circuit de base
+
                 if check_circuits(tmp_path, self.target_filepath,
                                   self.abc_path):
                     reward = 10
                     done = True
                 else:
                     reward = -0.1
+
+                os.remove(tmp_path)
+
         except Exception:
             reward = -2
 
         print(f"Action RL: {action}, reward: {reward:.2f}")
-        return self._get_obs(), reward, done, truncated, {}
+        info = {"action_mask": self.get_action_mask()}
+        return self._get_obs(), reward, done, truncated, info
 
     def _get_obs(self):
         """
@@ -133,7 +152,7 @@ class LogicCircuitEnv(gym.Env):
                         len(self.available_gates)), dtype=np.int8)
         nodes = list(self.circuit.graph.nodes)
 
-        for i, gate_id in enumerate(nodes[:20]):
+        for i, gate_id in enumerate(nodes[:self.max_gates]):
             gate = self.circuit.graph.nodes[gate_id]["gate"]
 
             # One-hot type
@@ -141,7 +160,7 @@ class LogicCircuitEnv(gym.Env):
 
             # Vérification d'erreur
             if type_idx is None:
-                return obs
+                continue
 
             obs[i][type_idx] = 1
 
@@ -149,11 +168,49 @@ class LogicCircuitEnv(gym.Env):
             successors = list(self.circuit.graph.successors(gate_id))
 
             for succ in successors:
-                if succ in nodes[:20]:
+                if succ in nodes[:self.max_gates]:
                     succ_idx = nodes.index(succ)
                     obs[i][8 + succ_idx] = 1
 
         return obs
+
+    def get_action_mask(self):
+        """
+        Génère un masque d'actions valides effectuables
+        """
+        self.valid_actions = self._compute_valid_actions()
+        mask = np.zeros(self.max_actions, dtype=bool)
+
+        for i in range(len(self.valid_actions)):
+            mask[i] = True
+
+        return mask
+
+    def _compute_valid_actions(self):
+        """
+        Génère la liste des actions valides par l'algorithme de RL
+        """
+        actions = []
+        nodes = list(self.circuit.graph.nodes)
+        max_id = min(self.max_gates, len(nodes))
+
+        for gate_type in range(len(self.available_gates)):
+            actions.append((0, gate_type, 0, 0))
+
+        for i in range(max_id):
+            actions.append((1, 0, i, 0))
+
+        for i in range(max_id):
+            for j in range(max_id):
+                if i != j:
+                    actions.append((2, 0, i, j))
+
+        for i in range(max_id):
+            for j in range(max_id):
+                if i != j:
+                    actions.append((3, 0, i, j))
+
+        return actions
 
     def render(self):
         """
@@ -181,17 +238,3 @@ class LogicCircuitEnv(gym.Env):
             return self.available_gates.index(gate_type)
 
         return None
-
-    def decode_action(self, action):
-        """
-        Décodeur d'actions
-        """
-        a_type = action // (len(self.available_gates) * self.max_gates *
-                            self.max_gates)
-        rem = action % (len(self.available_gates) * self.max_gates *
-                        self.max_gates)
-        gate = rem // (self.max_gates ** 2)
-        rem = rem % (self.max_gates ** 2)
-        src = rem // self.max_gates
-        tgt = rem % self.max_gates
-        return (a_type, gate, src, tgt)
