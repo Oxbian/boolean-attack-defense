@@ -69,7 +69,7 @@ else:
     print("Circuit différents")
 
 equiv2 = check_circuits("notafter.blif", "ortest.blif", config["abc_path"])
-if equiv:
+if equiv2:
     print("Circuit équivalent")
 else:
     print("Circuit différents")

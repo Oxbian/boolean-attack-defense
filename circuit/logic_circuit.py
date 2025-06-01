@@ -49,6 +49,7 @@ class LogicCircuit:
                 f"{bcolors.WARNING}Identifiant de la porte à supprimé non présent dans le graphe")
 
         # Sauvegarde du graphe avant la suppression pour pouvoir backup
+        # si la suppression n'est pas validable
         bk = self.graph.copy()
         self.graph.remove_node(gate_id)
 
@@ -64,6 +65,11 @@ class LogicCircuit:
         donc A ou B
         @param to_id: Identifiant de la porte de destination, ex: C
         """
+        # Vérification de l'existance des noeuds
+        if not self.graph.has_node(from_id) or not self.graph.has_node(to_id):
+            raise ValueError(
+                f"{bcolors.WARNING}Identifiant de la porte logique non existant")
+
         self.graph.remove_edge(from_id, to_id)
 
     def is_valid(self) -> bool:
@@ -228,6 +234,15 @@ class LogicCircuit:
                     else:
                         raise ValueError(
                             "XOR à plus de 2 entrées non supporté en BLIF natif")
+
+                elif gate_type == "XNOR":
+                    f.write(f".names {' '.join(predecessors)} {node}\n")
+                    if len(predecessors) == 2:
+                        # XNOR à 2 entrées : 00 ou 11 donnent 1
+                        f.write("00 1\n11 1\n")
+                    else:
+                        raise ValueError(
+                            "XNOR à plus de 2 entrées non supporté en BLIF natif")
 
                 elif gate_type == "BUF":
                     f.write(f".names {predecessors[0]} {node}\n")
