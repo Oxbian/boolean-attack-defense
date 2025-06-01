@@ -1,3 +1,4 @@
+import os
 import subprocess
 
 
@@ -11,12 +12,21 @@ def check_circuits(circuit_a_filepath: str, circuit_b_filepath: str, abc_path:
     non
     """
 
-    cmd = f"read {circuit_a_filepath}\nread {circuit_b_filepath}\ncec {circuit_a_filepath} {circuit_b_filepath}\n"
+    # Vérification existance des fichiers
+    if not os.path.exists(circuit_a_filepath) or not os.path.exists(circuit_b_filepath):
+        return False
+
+    cmd = f"read {circuit_a_filepath}\nread {circuit_b_filepath}\ncec {
+        circuit_a_filepath} {circuit_b_filepath}\n"
 
     process = subprocess.Popen([abc_path], stdin=subprocess.PIPE,
                                stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                text=True)
-    output, error = process.communicate(cmd)
+    try:
+        output, error = process.communicate(cmd, timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        return False
 
     # print(f"output: {output}, err: {error}")
     if error != "" or "NOT EQUIVALENT" in output:
