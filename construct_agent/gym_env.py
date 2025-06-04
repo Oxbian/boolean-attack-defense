@@ -53,8 +53,14 @@ class LogicCircuitEnv(gym.Env):
         # Définition d'une matrice max_gates * (nombre type + connexions) pour
         # enregistrer l'état du circuit
         self.observation_space = gym.spaces.Box(
-            low=0, high=1, shape=(self.max_gates, self.max_gates *
-                                  len(self.available_gates)), dtype=np.int8)
+            low=0,
+            high=1,
+            shape=(self.calculate_flat_dim(),),
+            dtype=np.float32
+        )
+#        self.observation_space = gym.spaces.Box(
+ #           low=0, high=1, shape=(self.max_gates, self.max_gates *
+  #                                len(self.available_gates)), dtype=np.int8)
 
         self.circuit = None
         self.valid_actions = []
@@ -68,10 +74,15 @@ class LogicCircuitEnv(gym.Env):
         super().reset(seed=seed)
         self.circuit = LogicCircuit()
 
-        # Ajout de base : deux inputs et une sortie
+        # Ajout de base : deux inputs et une sortie, une porte AND
         self.circuit.add_gate(LogicGate("INPUT", "A"))
         self.circuit.add_gate(LogicGate("INPUT", "B"))
+        self.circuit.add_gate(LogicGate("AND", "G1"))
         self.circuit.add_gate(LogicGate("OUTPUT", "OUT"))
+
+        self.circuit.connect("A", "G1")
+        self.circuit.connect("B", "G1")
+        self.circuit.connect("G1", "OUT")
 
         # self.faulty_circuit = FaultyCircuit(self.circuit)
         # self.faulty_circuit.add_fault("OUT", "bitflip")
@@ -130,7 +141,7 @@ class LogicCircuitEnv(gym.Env):
                     reward = 10
                     done = True
                 else:
-                    reward = -0.1
+                    reward = 1
 
                 os.remove(tmp_path)
 
@@ -148,31 +159,45 @@ class LogicCircuitEnv(gym.Env):
 
         @return: numpy array représentant l'état
         """
-        obs = np.zeros((self.max_gates, self.max_gates *
-                        len(self.available_gates)), dtype=np.int8)
+        types = np.zeros((self.max_gates, len(
+            self.available_gates)), dtype=np.int8)
+        adj = np.zeros((self.max_gates, self.max_gates), dtype=np.int8)
+        is_input = np.zeros((self.max_gates,), dtype=np.int8)
+        is_output = np.zeros((self.max_gates,), dtype=np.int8)
+        fanin = np.zeros((self.max_gates,), dtype=np.int8)
+        fanout = np.zeros((self.max_gates,), dtype=np.int8)
         nodes = list(self.circuit.graph.nodes)
 
         for i, gate_id in enumerate(nodes[:self.max_gates]):
             gate = self.circuit.graph.nodes[gate_id]["gate"]
-
-            # One-hot type
             type_idx = self._gate_type_to_int(gate.gate_type)
+            if type_idx is not None:
+                types[i][type_idx] = 1
 
-            # Vérification d'erreur
-            if type_idx is None:
-                continue
+            preds = list(self.circuit.graph.predecessors(gate_id))
+            succs = list(self.circuit.graph.successors(gate_id))
 
-            obs[i][type_idx] = 1
+            for j, other_id in enumerate(nodes[:self.max_gates]):
+                if self.circuit.graph.has_edge(gate_id, other_id):
+                    adj[i][j] = 1
 
-            # Connexions sortantes (adjacency vector)
-            successors = list(self.circuit.graph.successors(gate_id))
+            if gate.gate_type == "INPUT":
+                is_input[i] = 1
+            if gate.gate_type == "OUTPUT":
+                is_output[i] = 1
 
-            for succ in successors:
-                if succ in nodes[:self.max_gates]:
-                    succ_idx = nodes.index(succ)
-                    obs[i][8 + succ_idx] = 1
+            fanin[i] = len(preds)
+            fanout[i] = len(succs)
 
-        return obs
+        flat_obs = np.concatenate([
+            types.flatten(),
+            adj.flatten(),
+            is_input.flatten(),
+            is_output.flatten(),
+            fanin.flatten(),
+            fanout.flatten(),
+        ])
+        return flat_obs
 
     def get_action_mask(self):
         """
@@ -238,3 +263,17 @@ class LogicCircuitEnv(gym.Env):
             return self.available_gates.index(gate_type)
 
         return None
+
+    def calculate_flat_dim(self) -> int:
+        """
+        Fonction pour calculer la taille du dict applatis pour l'observation
+
+        @return: Taille applatis nécessaires
+        """
+
+        dim_gate_types = self.max_gates * len(self.available_gates)
+        dim_adjacency = self.max_gates * self.max_gates
+        dim_inputs_outputs = self.max_gates * 2  # is_input + is_output
+        dim_fan = self.max_gates * 2  # fanin + fanout
+
+        return dim_gate_types + dim_adjacency + dim_inputs_outputs + dim_fan
