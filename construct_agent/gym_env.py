@@ -58,9 +58,6 @@ class LogicCircuitEnv(gym.Env):
             shape=(self.calculate_flat_dim(),),
             dtype=np.float32
         )
-#        self.observation_space = gym.spaces.Box(
- #           low=0, high=1, shape=(self.max_gates, self.max_gates *
-  #                                len(self.available_gates)), dtype=np.int8)
 
         self.circuit = None
         self.valid_actions = []
