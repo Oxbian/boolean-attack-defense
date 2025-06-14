@@ -28,6 +28,7 @@ def check_circuits(circuit_a_filepath: str, circuit_b_filepath: str, abc_path:
         process.kill()
         return False
 
+    # DEBUG:
     # print(f"output: {output}, err: {error}")
     if error != "" or "NOT EQUIVALENT" in output:
         return False

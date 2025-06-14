@@ -3,7 +3,8 @@
 
 Le but de ce projet est de créer deux modèles d'apprentissage par renforcement
 qui auront pour objectif de faire un circuit booléen le plus efficace et
-résistant possible aux attaques.
+résistant possible aux attaques, en utilisant possiblement des techniques
+d'offuscation.
 
 Pour cela deux modèles seront créer:
 - Le constructeur, qui devra créer un circuit robuste
@@ -35,4 +36,14 @@ Pour l'utilisation du programme:
 
 La vérification formelle de l'égalité de deux circuits se faisant avec l'utilitaire
 [abc](https://github.com/berkeley-abc/abc), son installation est nécessaire.
-*TODO: rajouter un fichier de config pour définir le path du programme ABC*
+
+## Utilisation
+
+Les différents programmes ont besoin d'avoir accès à un fichier de configuration
+`config.json` contenant le chemin vers l'executable ABC.
+
+Le programme `main.py` à besoin d'un circuit de comparaison afin d'entrainer le
+modèle, ce circuit doit être défini dans le fichier de configuration
+`config.json`. Des circuits peuvent être générer grâce au programme
+`exemple.py`, qui permet de comprendre le fonctionnement de ce projet, ainsi que
+de vérifier le fonctionnement de ABC.

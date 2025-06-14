@@ -4,7 +4,7 @@ import uuid
 class LogicGate:
     """Classe pour définir une porte logique"""
 
-    def __init__(self, gate_type: str, gate_id: str = None):
+    def __init__(self, gate_type: str, gate_id: str | None = None):
         """Initialisation de la porte logique
         @param gate_type: String du type de porte logique, input pour les portes
         d'entrée du circuit, output pour la porte de sortie du circuit

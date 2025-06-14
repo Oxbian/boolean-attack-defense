@@ -63,12 +63,15 @@ circuit3.export_to_blif("ortest.blif", "ortest")
 
 # Comparaison des deux circuits avec ABC
 equiv = check_circuits("notafter.blif", "notfirst.blif", config["abc_path"])
+
+# Les deux circuits devraient être équivalents
 if equiv:
     print("Circuit équivalent")
 else:
     print("Circuit différents")
 
 equiv2 = check_circuits("notafter.blif", "ortest.blif", config["abc_path"])
+# Les deux circuits devraient être différents
 if equiv2:
     print("Circuit équivalent")
 else:
