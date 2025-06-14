@@ -3,10 +3,12 @@ import tempfile
 
 import gymnasium as gym
 import numpy as np
-# from attacker import FaultyCircuit
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 from circuit import LogicCircuit, LogicGate, check_circuits
-
-# import construct_agent as ca
+import networkx as nx
 
 
 class LogicCircuitEnv(gym.Env):
@@ -16,14 +18,23 @@ class LogicCircuitEnv(gym.Env):
     même en présence de fautes injectées par un attaquant.
     """
 
-    def __init__(self, target_filepath: str, abc_path: str):
+    def __init__(self, target_filepath: str, abc_path: str,
+                 render_mode: str | None = None):
         """
         Initialise l'environnement de construction de circuits
 
         @param target_circuit_path: Chemin vers le fichier .blif du circuit cible
         @param abc_path: Chemin vers l'exécutable ABC
         """
+        # Informations pour l'environnement Gymnasium
         super().__init__()
+        self.metadata['render_modes'] = ['rgb_array', 'human']
+        self.render_mode = render_mode
+        
+        # Nombre d'étapes avant truncated (permet d'optimiser l'enregistrement
+        # des vidéos de rendu)
+        self.max_steps = 500
+        self.current_steps = 0
 
         self.target_filepath = target_filepath
         self.abc_path = abc_path
@@ -58,20 +69,20 @@ class LogicCircuitEnv(gym.Env):
             shape=(self.calculate_flat_dim(),),
             dtype=np.float32
         )
-#        self.observation_space = gym.spaces.Box(
- #           low=0, high=1, shape=(self.max_gates, self.max_gates *
-  #                                len(self.available_gates)), dtype=np.int8)
 
         self.circuit = None
         self.valid_actions = []
 
-    def reset(self, seed=None, options=None):
+
+
+    def reset(self, seed: str | None = None, options: None = None):
         """
         Réinitialise l'environnement pour un nouvel épisode
 
         @return: Observation initiale, informations supplémentaires
         """
         super().reset(seed=seed)
+        self.current_steps = 0
         self.circuit = LogicCircuit()
 
         # Ajout de base : deux inputs et une sortie, une porte AND
@@ -84,6 +95,7 @@ class LogicCircuitEnv(gym.Env):
         self.circuit.connect("B", "G1")
         self.circuit.connect("G1", "OUT")
 
+        # Ajout d'une faute pour le circuit afin de l'aider à s'améliorer
         # self.faulty_circuit = FaultyCircuit(self.circuit)
         # self.faulty_circuit.add_fault("OUT", "bitflip")
 
@@ -96,10 +108,12 @@ class LogicCircuitEnv(gym.Env):
         Applique une action de modification sur le circuit
 
         @param action: Tuple (action_type, gate_type_or_source, source, target)
+
         @return: Observation, récompense, bool de fin d'épisode, bool de troncature, infos
         """
         done = False
         truncated = False
+        self.current_steps += 1
         reward = -0.1
 
         # Indexation de noeuds du graph
@@ -115,19 +129,26 @@ class LogicCircuitEnv(gym.Env):
             target_id = self.index_to_id.get(action_id2, f"G{action_id2}")
 
             if action_type == 0:  # Ajouter une porte logique au circuit
-                gate_type = self._int_to_gate_type(action_gate_type)
-                self.circuit.add_gate(LogicGate(gate_type))
+                if len(self.circuit.graph.nodes) < self.max_gates:
+                    gate_type = self._int_to_gate_type(action_gate_type)
+                    self.circuit.add_gate(LogicGate(gate_type))
+                    reward = 1
+                else:
+                    reward = -0.25
 
             elif action_type == 1:  # Supprimer une porte logique
                 is_removed = self.circuit.remove_gate(source_id)
+                reward = 1
                 if is_removed is False:
                     reward = -1
 
             elif action_type == 2:  # Connecter deux portes logiques
                 self.circuit.connect(source_id, target_id)
+                reward = 1
 
             elif action_type == 3:  # Déconnecter deux portes logiques
                 self.circuit.disconnect(source_id, target_id)
+                reward = 1
 
             if self.circuit.is_valid():
                 # Sauvegarder le circuit + comparer avec les fonctionnalités
@@ -141,24 +162,38 @@ class LogicCircuitEnv(gym.Env):
                     reward = 10
                     done = True
                 else:
-                    reward = 1
+                    reward = 5
 
                 os.remove(tmp_path)
 
         except Exception:
             reward = -2
 
-        print(f"Action RL: {action}, reward: {reward:.2f}")
+        print(f"Action RL: {action}, reward: {reward:.2f}, current_steps: {
+              self.current_steps}")
         info = {"action_mask": self.get_action_mask()}
+
+        # Optimisation pour le rendu vidéo, sinon le cache est trop grand et ça
+        # ralenti l'entrainement
+        if self.current_steps >= self.max_steps:
+            truncated = True
+
         return self._get_obs(), reward, done, truncated, info
 
     def _get_obs(self):
         """
-        Retourne une observation sous forme de matrice d'adjacence + types des
-        portes
+        Retourne une observation sous forme de vecteur applati 1D contenant la
+        structure du circuit (matrice adjacence, types de portes logiques)
 
         @return: numpy array représentant l'état
         """
+
+        # Création de vecteur qui contiendront les informations sur le circuit
+        # - Les types des différentes portes logiques
+        # - Une matrice d'adjacence des portes logiques pour comprendre les
+        # connexions
+        # - Le type de la porte logique (entrée, sortie etc)
+
         types = np.zeros((self.max_gates, len(
             self.available_gates)), dtype=np.int8)
         adj = np.zeros((self.max_gates, self.max_gates), dtype=np.int8)
@@ -168,6 +203,7 @@ class LogicCircuitEnv(gym.Env):
         fanout = np.zeros((self.max_gates,), dtype=np.int8)
         nodes = list(self.circuit.graph.nodes)
 
+        # Remplissage des vecteurs avec les informations
         for i, gate_id in enumerate(nodes[:self.max_gates]):
             gate = self.circuit.graph.nodes[gate_id]["gate"]
             type_idx = self._gate_type_to_int(gate.gate_type)
@@ -189,6 +225,7 @@ class LogicCircuitEnv(gym.Env):
             fanin[i] = len(preds)
             fanout[i] = len(succs)
 
+        # Applitassage des vecteurs pour avoir un espace d'observation en 1D
         flat_obs = np.concatenate([
             types.flatten(),
             adj.flatten(),
@@ -239,9 +276,46 @@ class LogicCircuitEnv(gym.Env):
 
     def render(self):
         """
-        Affiche le circuit courant
+        Génère la frame selon le render_mode, human affiche le plot, rgb_array
+        pour la vidéo
         """
-        self.circuit.visualize()
+
+        if self.render_mode is None:
+            return
+
+        fig = plt.figure()
+        canvas = FigureCanvas(fig)
+        ax = fig.add_subplot(111)
+
+        labels = {}
+        node_colors = []
+
+        for node in self.circuit.graph.nodes:
+            gate = self.circuit.graph.nodes[node]["gate"]
+            labels[node] = f"{gate.gate_type}"
+
+            # Colorations des noeuds selon leur type
+            if gate.gate_type == "INPUT":
+                node_colors.append("green")
+            elif gate.gate_type == "OUTPUT":
+                node_colors.append("yellow")
+            else:
+                node_colors.append("lightblue")
+
+        nx.draw(self.circuit.graph, ax=ax, labels=labels, with_labels=True,
+                node_size=1500, node_color=node_colors)
+
+        if self.render_mode == "human":
+            self.plt.pause(0.001)
+            self.plt.draw()
+            return
+
+        elif self.render_mode == "rgb_array":
+            canvas.draw()
+            buf = np.asarray(fig.canvas.buffer_rgba())
+            img = buf[:, :, :3].copy()
+            plt.close(fig)
+            return img
 
     def _int_to_gate_type(self, value: int) -> str:
         """

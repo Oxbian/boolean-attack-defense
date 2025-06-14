@@ -170,9 +170,12 @@ class LogicCircuit:
         plt.title("Visualisation du circuit logique")
         plt.show()
 
-    def export_to_blif(self, filename: str, model_name="circuit"):
+    def export_to_blif(self, filename: str, model_name: str | None = "circuit"):
         """
         Exporte le circuit logique sous forme BLIF.
+
+        @param filename: Nom du fichier où sera exporter le circuit
+        @param model_name: Nom du modèle, inscrit dans le .blif
         """
 
         with open(filename, "w") as f:
