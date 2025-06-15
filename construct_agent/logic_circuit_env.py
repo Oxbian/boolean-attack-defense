@@ -123,10 +123,11 @@ class LogicCircuitOptimizer:
                 tmp_path, self.target_filepath, self.abc_path)
             os.remove(tmp_path)
 
-            if not is_equivalent:
+            if not is_equivalent or circuit.is_valid() is False:
                 return 0
         except Exception:
-            return 0
+            if circuit.is_valid() is False:
+                return 0
 
         return 1
 
