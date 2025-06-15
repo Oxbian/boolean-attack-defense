@@ -20,7 +20,7 @@ class LogicCircuit:
         """Ajoute une porte logique au circuit
         @param gate: Porte logique à ajouté au circuit
         """
-        self.graph.add_node(gate.gate_id, gate=gate)
+        self.graph.add_node(gate.gate_id, gate=gate, label=gate.gate_id)
 
     def connect(self, from_id: str, to_id: str):
         """Connecte deux noeuds / portes logiques, ex: C a pour entrée A et B
@@ -154,18 +154,21 @@ class LogicCircuit:
 
         for node in self.graph.nodes:
             gate = self.graph.nodes[node]["gate"]
-            labels[node] = f"{gate.gate_id} : {gate.gate_type}"
 
-            # Colorations des noeuds selon leur type
+            # Coloration selon le type de porte
             if gate.gate_type == "INPUT":
+                labels[node] = gate.gate_id
                 node_colors.append("green")
             elif gate.gate_type == "OUTPUT":
+                labels[node] = gate.gate_id
                 node_colors.append("yellow")
             else:
+                labels[node] = gate.gate_type
                 node_colors.append("lightblue")
 
-        nx.draw(self.graph, labels=labels, with_labels=True,
-                node_size=1500, node_color=node_colors)
+        pos = nx.nx_agraph.graphviz_layout(self.graph, prog="dot")
+        nx.draw(self.graph, pos, with_labels=True, labels=labels,
+                node_size=1500, node_color=node_colors, arrows=True)
 
         plt.title("Visualisation du circuit logique")
         plt.show()
