@@ -51,5 +51,8 @@ fonctionnement de l'outil de vérification formelle ABC.
 
 ## Démonstration
 
-**Évolution de la création de circuits booléens par le constructeur :**
+**Évolution de la création de circuits booléens lors de l'entrainement par le constructeur :**
+
+[Évolution du circuits booléens](https://github.com/user-attachments/assets/69926a3c-662c-4b5a-824d-c81b93bef614)
+
 
