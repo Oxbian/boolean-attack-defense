@@ -40,10 +40,16 @@ La vérification formelle de l'égalité de deux circuits se faisant avec l'util
 ## Utilisation
 
 Les différents programmes ont besoin d'avoir accès à un fichier de configuration
-`config.json` contenant le chemin vers l'executable ABC.
-
+`config.json` contenant le chemin vers l'executable ABC.  
+  
 Le programme `main.py` à besoin d'un circuit de comparaison afin d'entrainer le
 modèle, ce circuit doit être défini dans le fichier de configuration
-`config.json`. Des circuits peuvent être générer grâce au programme
-`exemple.py`, qui permet de comprendre le fonctionnement de ce projet, ainsi que
-de vérifier le fonctionnement de ABC.
+`config.json`.  
+Des circuits peuvent être générer grâce au programme `exemple.py`, qui permet 
+de comprendre le fonctionnement de ce projet, ainsi que de vérifier le
+fonctionnement de l'outil de vérification formelle ABC.
+
+## Démonstration
+
+**Évolution de la création de circuits booléens par le constructeur :**
+
